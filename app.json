@@ -1,0 +1,49 @@
+{
+    "id": "com.irobot.roomba980",
+    "name": {
+        "en": "Roomba 980"
+    },
+    "tags": {
+        "en": [ "roomba 980", "vacuum cleaner", "vacuum", "irobot" ],
+        "nl": [ "roomba 980", "stofzuiger", "irobot" ]
+    },
+    "category": "appliances",
+    "sdk": 2,
+    "version": "1.0.0",
+    "compatibility": "1.x >= 1.5.0",
+    "author": {
+        "name": "Athom B.V.",
+        "email": "info@athom.com"
+    },
+    "drivers": [
+        {
+            "id": "roomba980",
+            "name": {
+                "en": "Roomba 980"
+            },
+            "class": "vacuumcleaner",
+            "capabilities": [
+                "vacuumcleaner_state",
+                "measure_battery"
+            ],
+            "pair": [
+                {
+                    "id": "list_devices",
+                    "template": "list_devices",
+                    "navigation": {
+                        "next": "add_roomba"
+                    },
+                    "options": {
+                        "singular": true
+                    }
+                },
+                {
+                    "id": "add_roomba",
+                    "navigation": {
+                        "next": "done"
+                    }
+                }
+            ]
+        }
+    ]
+}

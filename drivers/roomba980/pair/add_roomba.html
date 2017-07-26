@@ -1,0 +1,54 @@
+<script>
+    Homey.setTitle(__('pair.add.title'));
+
+    var device = window.selected_devices[0];
+
+    device = JSON.parse(device);
+
+    var interval;
+
+    function check() {
+        Homey.emit('check', {
+            ip: device.ip
+        }, function (err, result) {
+            if (err) return console.error(err);
+
+            if (result.status === 'success') {
+                device.auth.password = result.data;
+
+                // We do not care about the IP address anymore.
+                delete device.ip;
+
+                Homey.addDevice({
+                    data: device,
+                    name: device.name
+                }, function (err, result) {
+                    if (err) return console.error(err);
+
+                    clearInterval(interval);
+                    Homey.done();
+                });
+            }
+
+            if (result.status === 'in_use') {
+                // Temporarily display the warning. It doesn't stop the pairing
+                // progress, but asks the user to disconnect while the Homey
+                // tries to connect.
+                document.getElementById('warning').style.display = 'block';
+            } else {
+                document.getElementById('warning').style.display = 'none';
+            }
+        })
+    }
+
+    interval = setInterval(check, 10 * 1000);
+
+    // Maybe they've already pressed the button.
+    check();
+</script>
+
+<center>
+    <p data-i18n="pair.add.press_home"></p>
+    <p id="warning" data-i18n="error.in_use" style="display: none"></p>
+    <img src="pair_roomba.svg">
+</center>
