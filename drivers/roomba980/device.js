@@ -2,7 +2,7 @@
 
 const Homey = require('homey');
 
-const dorita980 = require('dorita980');
+const Roomba = require('./roomba');
 
 const RoombaFinder = require('./finder');
 
@@ -22,8 +22,14 @@ class Roomba980Device extends Homey.Device {
 
         this.findRobot();
 
+        this._reconnect();
+    }
+
+    _reconnect() {
         this.reconnectInterval = setInterval(() => {
             if (!this.connected) {
+                this.log('Connection was lost, finding new robots.');
+
                 this.findRobot();
             }
         }, 15000);
@@ -45,74 +51,87 @@ class Roomba980Device extends Homey.Device {
 
         this.finder.findRoomba()
             .then((robot) => {
+                this.log(`Found a Roomba: ${robot.ip}.`);
+
                 if (robot.mac !== this.data.mac) {
                     return;
                 }
 
-                try {
-                    this.robot = new dorita980.Local(this.data.auth.username, this.data.auth.password, robot.ip);
-                } catch (e) {
-                    this.setUnavailable();
+                this.robot = new Roomba(this.data.auth.username, this.data.auth.password, robot.ip);
 
-                    this.connected = false;
-
-                    delete this.robot;
-
-                    return;
-                }
-
-                this.robot.on('connect', () => {
+                this.robot.on('connected', () => {
                     this.connected = true;
 
+                    clearInterval(this.reconnectInterval);
+
+                    this.log(`Connected to ${robot.ip}.`);
+
                     this.setAvailable();
-                });
-
-                this.robot.on('close', () => {
-                    this.connected = false;
-
-                    this.disconnectFromRobot();
-
-                    this.setUnavailable(Homey.__('error.offline'));
                 });
 
                 this.robot.on('offline', () => {
                     this.connected = false;
 
+                    this.log(`Lost connection with ${robot.ip}: offline.`);
+
                     this.disconnectFromRobot();
+
+                    this._reconnect();
 
                     this.setUnavailable(Homey.__('error.offline'));
                 });
 
+                this.robot.on('error', e => {
+                    this.error(`Error in Roomba connection: ${e}`);
+                });
+
                 this.robot.on('state', (e) => {
-                    this.setCapabilityValue('measure_battery', e.batPct);
+                    if (typeof e.batPct !== 'undefined') {
+                        this.setCapabilityValue('measure_battery', e.batPct)
+                            .catch(this.error.bind('measure_battery', e.batPct));
+                    }
 
                     let cycle = e.cleanMissionStatus.cycle,
                         phase = e.cleanMissionStatus.phase;
 
                     if (cycle === 'none' && phase === 'charge') {
-                        this.setCapabilityValue('vacuumcleaner_state', 'charging');
+                        if (typeof e.batPct !== 'undefined' && e.batPct < 100) {
+                            this.setCapabilityValue('vacuumcleaner_state', 'charging')
+                                .catch(this.error.bind('vacuumcleaner_state charging'));
+                        } else {
+                            this.setCapabilityValue('vacuumcleaner_state', 'docked')
+                                .catch(this.error.bind('vacuumcleaner_state docked'));
+                        }
                     }
 
                     if (cycle === 'none' && phase === 'stop') {
-                        this.setCapabilityValue('vacuumcleaner_state', 'stopped');
+                        this.setCapabilityValue('vacuumcleaner_state', 'stopped')
+                            .catch(this.error.bind('vacuumcleaner_state stopped'));
                     }
 
                     if (cycle === 'dock' && phase === 'hmUsrDock') {
-                        this.setCapabilityValue('vacuumcleaner_state', 'docked');
+                        this.setCapabilityValue('vacuumcleaner_state', 'docked')
+                            .catch(this.error.bind('vacuumcleaner_state docked'));
                     }
 
                     if (cycle === 'quick' && phase === 'stop') {
-                        this.setCapabilityValue('vacuumcleaner_state', 'stopped');
+                        this.setCapabilityValue('vacuumcleaner_state', 'stopped')
+                            .catch(this.error.bind('vacuumcleaner_state stopped'));
                     }
 
                     if (cycle === 'quick' && phase === 'run') {
-                        this.setCapabilityValue('vacuumcleaner_state', 'cleaning');
+                        this.setCapabilityValue('vacuumcleaner_state', 'cleaning')
+                            .catch(this.error.bind('vacuumcleaner_state cleaning'));
                     }
 
                     if (cycle === 'spot' && phase === 'run') {
-                        this.setCapabilityValue('vacuumcleaner_state', 'spot_cleaning');
+                        this.setCapabilityValue('vacuumcleaner_state', 'spot_cleaning')
+                            .catch(this.error.bind('vacuumcleaner_state spot_cleaning'));
                     }
                 });
+            })
+            .catch(e => {
+                this.error(e);
             });
     }
 
@@ -137,10 +156,13 @@ class Roomba980Device extends Homey.Device {
     }
 
     disconnectFromRobot() {
-        this.robot.end(true, () => {
+        this.log('Disconnecting from robot...');
+
+        if (this.robot) {
             this.robot.removeAllListeners();
-            delete this.robot;
-        });
+
+            this.robot.end();
+        }
     }
 }
 
