@@ -7,8 +7,10 @@ const Homey = require('homey');
 /**
  * This class attempts to find new Roombas on the network.
  */
-class RoombaFinder {
+class RoombaFinder extends Homey.SimpleClass {
     constructor() {
+        super();
+
         this.listenServer = null;
         this.listening = false;
     }
@@ -16,17 +18,21 @@ class RoombaFinder {
     /**
      * Find any Roomba 980.
      *
-     * @return {Promise} Promise which resolves with data about the Roomba.
+     * @param {function} callback - Callback to call when a single robot is found.
+     * @return {Promise} Promise which resolves with data about Roombas.
      */
-    async findRoomba() {
+    async findRoomba(callback) {
         return new Promise((resolve, reject) => {
-            let nextStep = () => {
+            const roombas = [];
+
+            const nextStep = () => {
                 this.listenServer = dgram.createSocket('udp4');
 
-                let timeout = setTimeout(() => {
-                    reject(new Error('Could not find your roomba!'));
+                const timeout = setTimeout(() => {
                     this.listenServer.close(() => {
                         this.listening = false;
+
+                        resolve(roombas);
                     });
                 }, 10000);
 
@@ -55,11 +61,13 @@ class RoombaFinder {
                                 .then((mac) => {
                                     parsed.mac = mac;
 
-                                    resolve(parsed);
+                                    roombas.push(parsed);
+
+                                    if (callback) {
+                                        callback(parsed);
+                                    }
                                 })
-                                .catch((err) => {
-                                    reject(err);
-                                });
+                                .catch(this.error.bind(this, 'findRoomba -> getMAC'));
                         }
                     } catch (e) {
                         // Message is invalid, probably some other happy service
